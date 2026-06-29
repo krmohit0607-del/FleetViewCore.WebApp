@@ -1,228 +1,131 @@
 /**
  * Tracksheet grid — read-only stub.
  *
- * Mirrors a representative subset of the legacy `TrackSheetProcessor`
- * column layout:
- *   - Fundamentals   : Date, Time, HRS, Lat, Lon, Course, Heading
- *   - Fuel Type 1    : ROB / Bunkered Qty / Corrected ROB
- *   - Fuel Type 2    : ROB / Bunkered Qty / Corrected ROB
- *   - Distances      : DistR, DistO, DTG-O, DTG-R
- *   - Speed          : Inst., AVG, Performance
- *   - Wind / Sea     : Wind dir/speed (Bft), Wave height (m)
+ * Mirrors the legacy `TrackSheetProcessor` column layout:
+ *   - Fundamentals       : RT, Date, Time, HRS, Lat, Lng
+ *   - VLSFO 0.5% Sulphur : ROB / Bunkered / Corrected
+ *   - LSMGO 0.1% Sulphur : ROB / Bunkered / Corrected
+ *   - None               : ROB / Bunkered / Corrected
+ *   - Distances          : DistR, DistO, dtg-o
+ *   - Speed              : AvSpd-O
+ *   - Engine             : RPM, EnginePower, Slip, Course
+ *   - Cargo              : Amount
+ *   - Weather Conditions : WindO, WavesO
+ *   - Weather Factors    : Wind, Wave, Curr, AvgF
+ *   - Rpt Sent           : W, F, I
  *
- * The full Tabulator-based tracksheet has ~50+ columns; this is a
- * deliberately compact preview suitable for the bottom-panel slot.
- * Wire it to the real `/api/voyage/{id}/tracksheet` endpoint when it
- * is exposed for the React app.
+ * The grid is fed by `STUB_ROWS` for now. When the
+ * `/api/voyage/{id}/tracksheet` endpoint is exposed, replace the stub
+ * with the API response — every cell maps 1:1 to a `TrackRow` field so
+ * the markup does not need to change.
  */
 
 import { useSelectedVoyage } from '../data/selectedVoyage';
 
 interface TrackRow {
+  /** Report type marker (E = ETA/estimate, N = noon report). */
+  rt: string;
   date: string;
   time: string;
-  hrs: number;
+  /** Steaming hours; blank for estimate rows. */
+  hrs: number | null;
   lat: string;
-  lon: string;
-  course: number;
-  heading: number;
-  ft1Rob: number;
-  ft1Bunkered: number;
-  ft1Corrected: number;
-  ft2Rob: number;
-  ft2Bunkered: number;
-  ft2Corrected: number;
-  distR: number;
-  distO: number;
-  dtgO: number;
-  dtgR: number;
-  speedInst: number;
-  speedAvg: number;
-  performance: number;
-  windDir: string;
-  windBft: number;
-  waveM: number;
+  lng: string;
+  // VLSFO 0.5% Sulphur
+  vlsfoRob: number | null;
+  vlsfoBunkered: number | null;
+  vlsfoCorrected: number | null;
+  // LSMGO 0.1% Sulphur
+  lsmgoRob: number | null;
+  lsmgoBunkered: number | null;
+  lsmgoCorrected: number | null;
+  // None
+  noneRob: number | null;
+  noneBunkered: number | null;
+  noneCorrected: number | null;
+  // Distances
+  distR: number | null;
+  distO: number | null;
+  dtgO: number | null;
+  // Speed
+  avgSpeedO: number | null;
+  // Engine
+  rpm: number | null;
+  enginePower: number | null;
+  slip: number | null;
+  course: number | null;
+  // Cargo
+  amount: number | null;
+  // Weather conditions
+  windO: string;
+  wavesO: string;
+  // Weather factors
+  windF: number;
+  waveF: number;
+  currF: number;
+  /** Avg factor string `W / F / C`. */
+  avgF: string;
 }
 
 const STUB_ROWS: TrackRow[] = [
   {
-    date: '14-Jun-2026',
-    time: '12:00',
-    hrs: 24.0,
-    lat: '23°15.4 S',
-    lon: '044°22.1 W',
-    course: 88,
-    heading: 90,
-    ft1Rob: 1850.4,
-    ft1Bunkered: 0,
-    ft1Corrected: 1820.1,
-    ft2Rob: 122.6,
-    ft2Bunkered: 0,
-    ft2Corrected: 121.0,
-    distR: 290,
-    distO: 295,
-    dtgO: 9520,
-    dtgR: 9510,
-    speedInst: 12.1,
-    speedAvg: 11.9,
-    performance: 0.2,
-    windDir: 'NE',
-    windBft: 4,
-    waveM: 1.8,
+    rt: 'E', date: '25Jun2026', time: '1200', hrs: null, lat: '0545N', lng: '15347E',
+    vlsfoRob: null, vlsfoBunkered: null, vlsfoCorrected: null,
+    lsmgoRob: null, lsmgoBunkered: null, lsmgoCorrected: null,
+    noneRob: null, noneBunkered: null, noneCorrected: null,
+    distR: null, distO: null, dtgO: null, avgSpeedO: null,
+    rpm: null, enginePower: null, slip: null, course: null, amount: null,
+    windO: 'W4', wavesO: 'ESE1.2', windF: 0, waveF: 0, currF: -0.49, avgF: '',
   },
   {
-    date: '15-Jun-2026',
-    time: '12:00',
-    hrs: 24.0,
-    lat: '22°02.8 S',
-    lon: '040°10.9 W',
-    course: 86,
-    heading: 88,
-    ft1Rob: 1790.0,
-    ft1Bunkered: 0,
-    ft1Corrected: 1760.5,
-    ft2Rob: 121.0,
-    ft2Bunkered: 0,
-    ft2Corrected: 119.5,
-    distR: 287,
-    distO: 290,
-    dtgO: 9230,
-    dtgR: 9223,
-    speedInst: 11.95,
-    speedAvg: 11.92,
-    performance: 0.05,
-    windDir: 'ENE',
-    windBft: 5,
-    waveM: 2.1,
+    rt: 'E', date: '25Jun2026', time: '1800', hrs: null, lat: '0553N', lng: '15256E',
+    vlsfoRob: null, vlsfoBunkered: null, vlsfoCorrected: null,
+    lsmgoRob: null, lsmgoBunkered: null, lsmgoCorrected: null,
+    noneRob: null, noneBunkered: null, noneCorrected: null,
+    distR: null, distO: null, dtgO: null, avgSpeedO: null,
+    rpm: null, enginePower: null, slip: null, course: null, amount: null,
+    windO: 'WNW3', wavesO: 'NNE1.2', windF: 0, waveF: 0, currF: -0.42, avgF: '',
   },
   {
-    date: '16-Jun-2026',
-    time: '12:00',
-    hrs: 24.0,
-    lat: '20°48.1 S',
-    lon: '035°57.4 W',
-    course: 85,
-    heading: 86,
-    ft1Rob: 1731.2,
-    ft1Bunkered: 0,
-    ft1Corrected: 1700.8,
-    ft2Rob: 119.5,
-    ft2Bunkered: 0,
-    ft2Corrected: 118.0,
-    distR: 295,
-    distO: 298,
-    dtgO: 8932,
-    dtgR: 8928,
-    speedInst: 12.3,
-    speedAvg: 12.1,
-    performance: 0.2,
-    windDir: 'E',
-    windBft: 5,
-    waveM: 2.4,
+    rt: 'E', date: '26Jun2026', time: '0000', hrs: null, lat: '0601N', lng: '15204E',
+    vlsfoRob: null, vlsfoBunkered: null, vlsfoCorrected: null,
+    lsmgoRob: null, lsmgoBunkered: null, lsmgoCorrected: null,
+    noneRob: null, noneBunkered: null, noneCorrected: null,
+    distR: null, distO: null, dtgO: null, avgSpeedO: null,
+    rpm: null, enginePower: null, slip: null, course: null, amount: null,
+    windO: 'NW2', wavesO: 'NE1.1', windF: 0, waveF: 0, currF: -0.36, avgF: '',
   },
   {
-    date: '17-Jun-2026',
-    time: '12:00',
-    hrs: 24.0,
-    lat: '19°34.6 S',
-    lon: '031°45.2 W',
-    course: 84,
-    heading: 85,
-    ft1Rob: 1672.6,
-    ft1Bunkered: 200.0,
-    ft1Corrected: 1842.1,
-    ft2Rob: 118.0,
-    ft2Bunkered: 0,
-    ft2Corrected: 116.4,
-    distR: 282,
-    distO: 287,
-    dtgO: 8645,
-    dtgR: 8646,
-    speedInst: 11.75,
-    speedAvg: 11.96,
-    performance: -0.21,
-    windDir: 'ESE',
-    windBft: 6,
-    waveM: 3.0,
+    rt: 'N', date: '26Jun2026', time: '0300', hrs: 25.0, lat: '0604N', lng: '15138E',
+    vlsfoRob: 460.25, vlsfoBunkered: 0, vlsfoCorrected: 0,
+    lsmgoRob: 77.2, lsmgoBunkered: 0, lsmgoCorrected: 0,
+    noneRob: 0, noneBunkered: 0, noneCorrected: 0,
+    distR: 217.0, distO: 216.7, dtgO: 1839.7, avgSpeedO: 8.7,
+    rpm: 83.03, enginePower: 2567.0, slip: 22.56, course: 278, amount: 0,
+    windO: 'NW2', wavesO: 'NE1.1', windF: 0, waveF: 0, currF: -0.35, avgF: '-0.04 / -0.02 / -0.41',
   },
   {
-    date: '18-Jun-2026',
-    time: '12:00',
-    hrs: 24.0,
-    lat: '18°20.9 S',
-    lon: '027°33.7 W',
-    course: 84,
-    heading: 84,
-    ft1Rob: 1782.5,
-    ft1Bunkered: 0,
-    ft1Corrected: 1752.6,
-    ft2Rob: 116.4,
-    ft2Bunkered: 0,
-    ft2Corrected: 114.9,
-    distR: 290,
-    distO: 292,
-    dtgO: 8353,
-    dtgR: 8356,
-    speedInst: 12.17,
-    speedAvg: 12.0,
-    performance: 0.17,
-    windDir: 'SE',
-    windBft: 4,
-    waveM: 1.7,
+    rt: 'N', date: '27Jun2026', time: '0300', hrs: 24.0, lat: '0638N', lng: '14750E',
+    vlsfoRob: 447.86, vlsfoBunkered: 0, vlsfoCorrected: 0,
+    lsmgoRob: 77.1, lsmgoBunkered: 0, lsmgoCorrected: 0,
+    noneRob: 0, noneBunkered: 0, noneCorrected: 0,
+    distR: 230.0, distO: 230.0, dtgO: 1770.5, avgSpeedO: 9.6,
+    rpm: 83.01, enginePower: 2565.0, slip: 14.56, course: 278, amount: 0,
+    windO: 'VAR0', wavesO: 'VAR0.0', windF: 0, waveF: 0, currF: 0, avgF: '0 / 0 / 0',
   },
   {
-    date: '19-Jun-2026',
-    time: '12:00',
-    hrs: 24.0,
-    lat: '17°08.2 S',
-    lon: '023°22.3 W',
-    course: 84,
-    heading: 85,
-    ft1Rob: 1722.0,
-    ft1Bunkered: 0,
-    ft1Corrected: 1692.4,
-    ft2Rob: 114.9,
-    ft2Bunkered: 0,
-    ft2Corrected: 113.5,
-    distR: 289,
-    distO: 291,
-    dtgO: 8062,
-    dtgR: 8067,
-    speedInst: 12.13,
-    speedAvg: 12.04,
-    performance: 0.09,
-    windDir: 'SE',
-    windBft: 3,
-    waveM: 1.4,
-  },
-  {
-    date: '20-Jun-2026',
-    time: '12:00',
-    hrs: 24.0,
-    lat: '15°55.5 S',
-    lon: '019°10.9 W',
-    course: 84,
-    heading: 84,
-    ft1Rob: 1661.7,
-    ft1Bunkered: 0,
-    ft1Corrected: 1632.2,
-    ft2Rob: 113.5,
-    ft2Bunkered: 0,
-    ft2Corrected: 112.0,
-    distR: 286,
-    distO: 288,
-    dtgO: 7774,
-    dtgR: 7781,
-    speedInst: 12.0,
-    speedAvg: 12.03,
-    performance: -0.03,
-    windDir: 'S',
-    windBft: 4,
-    waveM: 1.9,
+    rt: 'N', date: '28Jun2026', time: '0300', hrs: 24.0, lat: '0713N', lng: '14355E',
+    vlsfoRob: 435.66, vlsfoBunkered: 0, vlsfoCorrected: 0,
+    lsmgoRob: 77, lsmgoBunkered: 0, lsmgoCorrected: 0,
+    noneRob: 0, noneBunkered: 0, noneCorrected: 0,
+    distR: 236.0, distO: 577.3, dtgO: 1267.9, avgSpeedO: 24.1,
+    rpm: 83.02, enginePower: 2566.0, slip: 12.29, course: 278, amount: 0,
+    windO: 'VAR0', wavesO: 'VAR0.0', windF: 0, waveF: 0, currF: 0, avgF: '0 / 0 / 0',
   },
 ];
 
-function n(value: number, digits = 2): string {
+function n(value: number | null, digits = 2): string {
+  if (value === null) return '';
   return value.toLocaleString(undefined, {
     minimumFractionDigits: digits,
     maximumFractionDigits: digits,
@@ -244,84 +147,119 @@ export function TracksheetGrid() {
       <table className="fv-tracksheet__table">
         <thead>
           <tr className="fv-tracksheet__group-row">
-            <th colSpan={7}>Fundamentals</th>
-            <th colSpan={3}>Fuel Type 1</th>
-            <th colSpan={3}>Fuel Type 2</th>
-            <th colSpan={4}>Distances</th>
-            <th colSpan={3}>Speed</th>
-            <th colSpan={3}>Wind / Sea</th>
+            <th colSpan={6}>Fundamentals</th>
+            <th colSpan={3}>VLSFO 0.5% Sulphur</th>
+            <th colSpan={3}>LSMGO 0.1% Sulphur</th>
+            <th colSpan={3}>None</th>
+            <th colSpan={3}>Distances</th>
+            <th colSpan={1}>Speed</th>
+            <th colSpan={4}>Engine</th>
+            <th colSpan={1}>Cargo</th>
+            <th colSpan={2}>Weather Conditions</th>
+            <th colSpan={4}>Weather Factors</th>
+            <th colSpan={3}>Rpt Sent</th>
+            <th colSpan={1} />
           </tr>
           <tr className="fv-tracksheet__head-row">
+            <th>RT</th>
             <th>Date</th>
             <th>Time</th>
             <th>HRS</th>
             <th>Lat</th>
-            <th>Lon</th>
-            <th>Course</th>
-            <th>Heading</th>
+            <th>Lng</th>
 
             <th>ROB</th>
             <th>Bunkered</th>
-            <th>Corr. ROB</th>
+            <th>Corrected</th>
 
             <th>ROB</th>
             <th>Bunkered</th>
-            <th>Corr. ROB</th>
+            <th>Corrected</th>
+
+            <th>ROB</th>
+            <th>Bunkered</th>
+            <th>Corrected</th>
 
             <th>DistR</th>
             <th>DistO</th>
-            <th>DTG-O</th>
-            <th>DTG-R</th>
+            <th>dtg-o</th>
 
-            <th>Inst.</th>
-            <th>AVG</th>
-            <th>Perf.</th>
+            <th>AvSpd-O</th>
 
-            <th>Wind dir</th>
-            <th>Wind (Bft)</th>
-            <th>Wave (m)</th>
+            <th>RPM</th>
+            <th>EnginePower</th>
+            <th>Slip</th>
+            <th>Course</th>
+
+            <th>Amount</th>
+
+            <th>WindO</th>
+            <th>WavesO</th>
+
+            <th>Wind</th>
+            <th>Wave</th>
+            <th>Curr</th>
+            <th>AvgF</th>
+
+            <th>W</th>
+            <th>F</th>
+            <th>I</th>
+            <th />
           </tr>
         </thead>
         <tbody>
           {STUB_ROWS.map((r) => (
             <tr key={`${r.date}-${r.time}`}>
+              <td>{r.rt}</td>
               <td>{r.date}</td>
               <td>{r.time}</td>
               <td className="fv-tracksheet__num">{n(r.hrs, 1)}</td>
               <td>{r.lat}</td>
-              <td>{r.lon}</td>
-              <td className="fv-tracksheet__num">{r.course}°</td>
-              <td className="fv-tracksheet__num">{r.heading}°</td>
+              <td>{r.lng}</td>
 
-              <td className="fv-tracksheet__num">{n(r.ft1Rob, 1)}</td>
-              <td className="fv-tracksheet__num">{n(r.ft1Bunkered, 1)}</td>
-              <td className="fv-tracksheet__num">{n(r.ft1Corrected, 1)}</td>
+              <td className="fv-tracksheet__num">{n(r.vlsfoRob, 2)}</td>
+              <td className="fv-tracksheet__num">{n(r.vlsfoBunkered, 0)}</td>
+              <td className="fv-tracksheet__num">{n(r.vlsfoCorrected, 0)}</td>
 
-              <td className="fv-tracksheet__num">{n(r.ft2Rob, 1)}</td>
-              <td className="fv-tracksheet__num">{n(r.ft2Bunkered, 1)}</td>
-              <td className="fv-tracksheet__num">{n(r.ft2Corrected, 1)}</td>
+              <td className="fv-tracksheet__num">{n(r.lsmgoRob, 1)}</td>
+              <td className="fv-tracksheet__num">{n(r.lsmgoBunkered, 0)}</td>
+              <td className="fv-tracksheet__num">{n(r.lsmgoCorrected, 0)}</td>
 
-              <td className="fv-tracksheet__num">{r.distR}</td>
-              <td className="fv-tracksheet__num">{r.distO}</td>
-              <td className="fv-tracksheet__num">{r.dtgO.toLocaleString()}</td>
-              <td className="fv-tracksheet__num">{r.dtgR.toLocaleString()}</td>
+              <td className="fv-tracksheet__num">{n(r.noneRob, 0)}</td>
+              <td className="fv-tracksheet__num">{n(r.noneBunkered, 0)}</td>
+              <td className="fv-tracksheet__num">{n(r.noneCorrected, 0)}</td>
 
-              <td className="fv-tracksheet__num">{n(r.speedInst, 2)}</td>
-              <td className="fv-tracksheet__num">{n(r.speedAvg, 2)}</td>
+              <td className="fv-tracksheet__num">{n(r.distR, 2)}</td>
+              <td className="fv-tracksheet__num">{n(r.distO, 1)}</td>
+              <td className="fv-tracksheet__num">{n(r.dtgO, 1)}</td>
+
+              <td className="fv-tracksheet__num">{n(r.avgSpeedO, 1)}</td>
+
+              <td className="fv-tracksheet__num">{n(r.rpm, 2)}</td>
+              <td className="fv-tracksheet__num">{n(r.enginePower, 1)}</td>
+              <td className="fv-tracksheet__num">{n(r.slip, 2)}</td>
+              <td className="fv-tracksheet__num">{r.course ?? ''}</td>
+
+              <td className="fv-tracksheet__num">{n(r.amount, 3)}</td>
+
+              <td>{r.windO}</td>
+              <td>{r.wavesO}</td>
+
+              <td className="fv-tracksheet__num">{n(r.windF, 2)}</td>
+              <td className="fv-tracksheet__num">{n(r.waveF, 2)}</td>
               <td
                 className={`fv-tracksheet__num ${
-                  r.performance >= 0
-                    ? 'fv-tracksheet__perf-gain'
-                    : 'fv-tracksheet__perf-loss'
+                  r.currF < 0 ? 'fv-tracksheet__perf-loss' : ''
                 }`}
               >
-                {r.performance >= 0 ? '+' : ''}
-                {n(r.performance, 2)}
+                {n(r.currF, 2)}
               </td>
+              <td className="fv-tracksheet__num">{r.avgF}</td>
 
-              <td>{r.windDir}</td>
-              <td className="fv-tracksheet__num">{r.windBft}</td>
-              <td className="fv-tracksheet__num">{n(r.waveM, 1)}</td>
+              <td className="fv-tracksheet__rpt" />
+              <td className="fv-tracksheet__rpt" />
+              <td className="fv-tracksheet__rpt" />
+              <td className="fv-tracksheet__rpt"><i className="fas fa-save" aria-hidden="true" /></td>
             </tr>
           ))}
         </tbody>

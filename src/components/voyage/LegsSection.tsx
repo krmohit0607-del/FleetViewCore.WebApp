@@ -7,6 +7,8 @@ import {
   FUEL_TYPE_OPTIONS,
   LEG_STATUS_OPTIONS,
   LEG_VOYAGE_TYPE_OPTIONS,
+  CP_CURRENTS_OPTIONS,
+  CP_GOOD_WEATHER_OPTIONS,
   type LegRow,
   type SpeedConsRow,
   type SubLeg,
@@ -494,9 +496,9 @@ export function LegsSection({ view, setView, editing, onToggleEdit, title, colla
                 <Field label="DSS" value={leg.cpDss} editing={editing} onChange={(x) => setLeg(i, 'cpDss', x)} />
                 <Field label="SWH" value={leg.cpSwh} editing={editing} onChange={(x) => setLeg(i, 'cpSwh', x)} />
                 <Field label="Min Hours" value={leg.cpMinHours} editing={editing} onChange={(x) => setLeg(i, 'cpMinHours', x)} />
-                <Field label="Currents" value={leg.cpCurrents} editing={editing} onChange={(x) => setLeg(i, 'cpCurrents', x)} />
+                <Field label="Currents" value={leg.cpCurrents} editing={editing} onChange={(x) => setLeg(i, 'cpCurrents', x)} options={CP_CURRENTS_OPTIONS} />
                 <Field label="Allowable Fuel Method" value={leg.cpAllowableFuelMethod} editing={editing} onChange={(x) => setLeg(i, 'cpAllowableFuelMethod', x)} />
-                <Field label="Good Weather Selection" value={leg.cpGoodWeatherSelection} editing={editing} onChange={(x) => setLeg(i, 'cpGoodWeatherSelection', x)} />
+                <Field label="Good Weather Selection" value={leg.cpGoodWeatherSelection} editing={editing} onChange={(x) => setLeg(i, 'cpGoodWeatherSelection', x)} options={CP_GOOD_WEATHER_OPTIONS} />
                 <Field label="About Speed" value={leg.cpAboutSpeed} editing={editing} onChange={(x) => setLeg(i, 'cpAboutSpeed', x)} />
                 <Field label="Time Gain" value={leg.cpTimeGain} editing={editing} onChange={(x) => setLeg(i, 'cpTimeGain', x)} />
                 <Field label="Time Loss" value={leg.cpTimeLoss} editing={editing} onChange={(x) => setLeg(i, 'cpTimeLoss', x)} />
@@ -621,12 +623,13 @@ export function LegsSection({ view, setView, editing, onToggleEdit, title, colla
                                       <Field label="DSS" value={s.cpDss} editing={editing} onChange={(x) => setSubLeg(i, si, 'cpDss', x)} />
                                       <Field label="SWH" value={s.cpSwh} editing={editing} onChange={(x) => setSubLeg(i, si, 'cpSwh', x)} />
                                       <Field label="Min Hours" value={s.cpMinHours} editing={editing} onChange={(x) => setSubLeg(i, si, 'cpMinHours', x)} />
-                                      <Field label="Currents" value={s.cpCurrents} editing={editing} onChange={(x) => setSubLeg(i, si, 'cpCurrents', x)} />
+                                      <Field label="Currents" value={s.cpCurrents} editing={editing} onChange={(x) => setSubLeg(i, si, 'cpCurrents', x)} options={CP_CURRENTS_OPTIONS} />
                                       <Field
                                         label="Good Weather Selection"
                                         value={s.cpGoodWeatherSelection}
                                         editing={editing}
                                         onChange={(x) => setSubLeg(i, si, 'cpGoodWeatherSelection', x)}
+                                        options={CP_GOOD_WEATHER_OPTIONS}
                                       />
                                     </div>
                                   </div>

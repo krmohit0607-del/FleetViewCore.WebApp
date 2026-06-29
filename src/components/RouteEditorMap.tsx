@@ -21,7 +21,7 @@ import { WeatherFieldControl } from './WeatherFieldControl';
  *   waypoint at the clicked position (`onAddPoint`).
  * - Existing waypoints render as numbered, draggable markers connected
  *   by a polyline; dragging one updates its position (`onMovePoint`).
- * - Clicking a marker selects it (`onSelectPoint`).
+ * - Clicking a marker deletes it (`onDeletePoint`).
  *
  * Coordinates are plain decimal degrees here; the parent converts to /
  * from the degree-minute strings used by the waypoint table.
@@ -51,7 +51,6 @@ interface RouteEditorMapProps {
   onAddPoint: (lat: number, lon: number) => void;
   onInsertPoint: (afterIndex: number, lat: number, lon: number) => void;
   onMovePoint: (id: string, lat: number, lon: number) => void;
-  onSelectPoint: (id: string) => void;
   onDeletePoint: (id: string) => void;
 }
 
@@ -137,7 +136,6 @@ export function RouteEditorMap({
   onAddPoint,
   onInsertPoint,
   onMovePoint,
-  onSelectPoint,
   onDeletePoint,
 }: RouteEditorMapProps) {
   const line: LatLngExpression[] = points.map((p) => [p.lat, p.lon]);
@@ -214,7 +212,9 @@ export function RouteEditorMap({
             selected: selected.includes(p.id),
           })}
           eventHandlers={{
-            click: () => onSelectPoint(p.id),
+            click: () => {
+              if (!p.isPort) onDeletePoint(p.id);
+            },
             dblclick: (e) => {
               if (e.originalEvent) L.DomEvent.stop(e.originalEvent);
               if (!p.isPort) onDeletePoint(p.id);

@@ -84,20 +84,7 @@ const TABS: TabDef[] = [
     labelKey: 'routeEditing',
     labelFallback: 'Route Editing',
     route: '/route-explorer',
-    planned: [
-      { label: 'Open route editor', route: '/route-explorer' },
-      { label: 'Plot route on map', route: '/plot-route' },
-      { label: 'Import / export', route: '/route-editor#import-export' },
-      { label: 'Add leg', route: '/route-editor#add-leg' },
-      { label: 'Update leg', route: '/route-editor#update-leg' },
-      { label: 'Split leg', route: '/route-editor#split-leg' },
-      { label: 'Merge leg', route: '/route-editor#merge-leg' },
-      {
-        label: 'Waypoint details: lat/lon, course, speed, distance from last waypoint',
-        route: '/route-editor#waypoint-details',
-      },
-      { label: 'Toggle: drift until / sail', route: '/route-editor#toggle-drift' },
-    ],
+    planned: [],
   },
   {
     id: 'limits',
@@ -158,17 +145,7 @@ const TABS: TabDef[] = [
   },
 ];
 
-const COLLAPSED_KEY = 'fv.leftSidebar.collapsed';
 const ACTIVE_TAB_KEY = 'fv.leftSidebar.activeTab';
-
-function readBool(key: string, fallback: boolean): boolean {
-  try {
-    const v = window.localStorage.getItem(key);
-    return v === null ? fallback : v === '1';
-  } catch {
-    return fallback;
-  }
-}
 
 function readActiveTab(): TabId {
   try {
@@ -180,7 +157,7 @@ function readActiveTab(): TabId {
   return 'dashboard';
 }
 
-export function LeftSidebar({ iconOnly = false }: { iconOnly?: boolean } = {}) {
+export function LeftSidebar(_props: { iconOnly?: boolean } = {}) {
   const l = useL();
   const navigate = useNavigate();
   const t = (key: string, fallback: string) => {
@@ -188,21 +165,10 @@ export function LeftSidebar({ iconOnly = false }: { iconOnly?: boolean } = {}) {
     return v === key ? fallback : v;
   };
 
-  const [collapsed, setCollapsed] = useState(() =>
-    iconOnly ? true : readBool(COLLAPSED_KEY, false),
-  );
+  const [collapsed] = useState(true);
   const [activeTab, setActiveTab] = useState<TabId>(() => readActiveTab());
   const [theme, toggleTheme] = useTheme();
   const [profileOpen, setProfileOpen] = useState(false);
-
-  useEffect(() => {
-    if (iconOnly) return;
-    try {
-      window.localStorage.setItem(COLLAPSED_KEY, collapsed ? '1' : '0');
-    } catch {
-      /* ignore */
-    }
-  }, [collapsed, iconOnly]);
 
   useEffect(() => {
     try {
@@ -219,8 +185,6 @@ export function LeftSidebar({ iconOnly = false }: { iconOnly?: boolean } = {}) {
     document.addEventListener('click', onDocClick);
     return () => document.removeEventListener('click', onDocClick);
   }, [profileOpen]);
-
-  const active = TABS.find((tab) => tab.id === activeTab) ?? TABS[0];
 
   return (
     <aside
@@ -242,26 +206,9 @@ export function LeftSidebar({ iconOnly = false }: { iconOnly?: boolean } = {}) {
                   !collapsed && tab.id === activeTab ? ' fv-left-tab--active' : ''
                 }`}
                 onClick={() => {
-                  if (iconOnly) {
-                    // Focused views keep the rail icon-only; clicking an
-                    // icon just navigates to that feature's page.
-                    navigate(tab.route ?? '/');
-                    return;
-                  }
-                  // Clicking an icon while collapsed expands the panel and
-                  // selects that tab. Clicking the active tab while open
-                  // collapses again (so the icon strip becomes a quick toggle).
-                  if (collapsed) {
-                    setActiveTab(tab.id);
-                    setCollapsed(false);
-                  } else if (tab.id === activeTab) {
-                    setCollapsed(true);
-                  } else {
-                    setActiveTab(tab.id);
-                  }
-                  // Tabs with a dedicated page navigate to it; every other
-                  // tab returns to the dashboard map so the user always
-                  // ends up on a real page.
+                  // Clicking an icon selects that tab and navigates to its
+                  // page (or the dashboard map when none is defined).
+                  setActiveTab(tab.id);
                   navigate(tab.route ?? '/');
                 }}
                 title={t(tab.labelKey, tab.labelFallback)}
@@ -274,51 +221,6 @@ export function LeftSidebar({ iconOnly = false }: { iconOnly?: boolean } = {}) {
             </li>
           ))}
         </ul>
-
-        {!collapsed && (
-          <div className="fv-left-tab-panel">
-            <button
-              type="button"
-              className="fv-left-sidebar__toggle"
-              onClick={() => setCollapsed(true)}
-              aria-expanded={true}
-              aria-controls="fv-left-sidebar-body"
-              title={t('collapse', 'Collapse')}
-            >
-              <span aria-hidden="true">‹</span>
-            </button>
-            <h3 className="fv-left-tab-panel__title">
-              {t(active.labelKey, active.labelFallback)}
-            </h3>
-            {active.id === 'dashboard' ? (
-              <p className="fv-left-tab-panel__hint">
-                {t('useSectionTabs', 'Use the section tabs on the page to open each section.')}
-              </p>
-            ) : (
-              <ul className="fv-left-tab-panel__list">
-                {active.planned.map((item) => {
-                  const entry: PlannedItem =
-                    typeof item === 'string' ? { label: item } : item;
-                  return (
-                    <li key={entry.label}>
-                      {entry.route ? (
-                        <button
-                          type="button"
-                          className="fv-left-tab-panel__link"
-                          onClick={() => navigate(entry.route!)}
-                        >
-                          {entry.label}
-                        </button>
-                      ) : (
-                        entry.label
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </div>
-        )}
       </div>
 
       <div className="fv-left-sidebar__footer">

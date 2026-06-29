@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 
 import { useL } from '../i18n/LocalizationProvider';
 import { useSelectedVoyage } from '../data/selectedVoyage';
+import { RouteEditingTabs } from './RouteEditingTabs';
 
 /**
  * Route Editor page — `/route-editor`.
@@ -210,66 +211,128 @@ export function RouteEditorPage() {
     );
   };
 
-  const exportRoute = () => {
-    const payload = waypoints.map((wp) => ({
-      name: wp.name,
-      lat: Number(wp.lat.toFixed(5)),
-      lon: Number(wp.lon.toFixed(5)),
-      speed: wp.speed,
-      drift: wp.drift,
-      isPort: wp.isPort,
-    }));
-    const json = JSON.stringify(payload, null, 2);
-    setImportText(json);
-    if (navigator.clipboard?.writeText) {
-      navigator.clipboard.writeText(json).catch(() => undefined);
-    }
-    setIoMessage(t('exportDone', 'Route exported to the text box (and copied to clipboard).'));
-  };
-
-  const importRoute = () => {
-    try {
-      const parsed = JSON.parse(importText);
-      if (!Array.isArray(parsed) || parsed.length < 2) {
-        setIoMessage(t('importTooFew', 'Provide a JSON array with at least two waypoints.'));
-        return;
-      }
-      const imported: Waypoint[] = parsed.map((raw, i) => ({
-        id: `wp-${Date.now()}-${i}`,
-        name: String(raw.name ?? `Waypoint ${i + 1}`),
-        lat: Number(raw.lat) || 0,
-        lon: Number(raw.lon) || 0,
-        speed: Number(raw.speed) || 0,
-        drift: Boolean(raw.drift),
-        isPort: Boolean(raw.isPort) || i === 0 || i === parsed.length - 1,
-      }));
-      setWaypoints(imported);
-      setSelectedLeg(0);
-      setIoMessage(t('importDone', 'Route imported.'));
-    } catch {
-      setIoMessage(t('importErr', 'Could not parse JSON. Check the format and try again.'));
-    }
-  };
-
   const downloadRef = useRef<HTMLAnchorElement>(null);
-  const downloadRoute = () => {
-    const payload = waypoints.map((wp) => ({
-      name: wp.name,
-      lat: Number(wp.lat.toFixed(5)),
-      lon: Number(wp.lon.toFixed(5)),
-      speed: wp.speed,
-      drift: wp.drift,
-      isPort: wp.isPort,
-    }));
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+
+  const exportRoute = () => {
+    const header = 'name,lat,lon,speed,drift,isPort';
+    const rows = waypoints.map((wp) => {
+      const name = `"${wp.name.replace(/"/g, '""')}"`;
+      return [
+        name,
+        wp.lat.toFixed(5),
+        wp.lon.toFixed(5),
+        wp.speed,
+        wp.drift,
+        wp.isPort,
+      ].join(',');
+    });
+    const csv = [header, ...rows].join('\n');
+    setImportText(csv);
+    const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = downloadRef.current;
     if (a) {
       a.href = url;
-      a.download = 'route.json';
+      a.download = 'route.csv';
       a.click();
     }
     setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setIoMessage(t('exportDone', 'Route exported as CSV (downloaded and shown below).'));
+  };
+
+  /** Split a CSV line, honouring quoted fields with embedded commas. */
+  const parseCsvLine = (line: string): string[] => {
+    const out: string[] = [];
+    let cur = '';
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i += 1) {
+      const ch = line[i];
+      if (inQuotes) {
+        if (ch === '"' && line[i + 1] === '"') {
+          cur += '"';
+          i += 1;
+        } else if (ch === '"') {
+          inQuotes = false;
+        } else {
+          cur += ch;
+        }
+      } else if (ch === '"') {
+        inQuotes = true;
+      } else if (ch === ',') {
+        out.push(cur);
+        cur = '';
+      } else {
+        cur += ch;
+      }
+    }
+    out.push(cur);
+    return out;
+  };
+
+  const importRoute = (raw?: string) => {
+    const text = (raw ?? importText).trim();
+    // Accept legacy JSON arrays, otherwise parse as CSV.
+    if (text.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(text);
+        if (!Array.isArray(parsed) || parsed.length < 2) {
+          setIoMessage(t('importTooFew', 'Provide at least two waypoints.'));
+          return;
+        }
+        const imported: Waypoint[] = parsed.map((raw, i) => ({
+          id: `wp-${Date.now()}-${i}`,
+          name: String(raw.name ?? `Waypoint ${i + 1}`),
+          lat: Number(raw.lat) || 0,
+          lon: Number(raw.lon) || 0,
+          speed: Number(raw.speed) || 0,
+          drift: Boolean(raw.drift),
+          isPort: Boolean(raw.isPort) || i === 0 || i === parsed.length - 1,
+        }));
+        setWaypoints(imported);
+        setSelectedLeg(0);
+        setIoMessage(t('importDone', 'Route imported.'));
+        return;
+      } catch {
+        setIoMessage(t('importErr', 'Could not parse the data. Check the format and try again.'));
+        return;
+      }
+    }
+    const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+    if (lines.length && /name\s*,\s*lat/i.test(lines[0])) lines.shift();
+    if (lines.length < 2) {
+      setIoMessage(t('importTooFew', 'Provide at least two waypoints.'));
+      return;
+    }
+    const imported: Waypoint[] = lines.map((line, i) => {
+      const [name, lat, lon, speed, drift, isPort] = parseCsvLine(line);
+      return {
+        id: `wp-${Date.now()}-${i}`,
+        name: (name ?? `Waypoint ${i + 1}`).trim(),
+        lat: Number(lat) || 0,
+        lon: Number(lon) || 0,
+        speed: Number(speed) || 0,
+        drift: String(drift).trim().toLowerCase() === 'true',
+        isPort:
+          String(isPort).trim().toLowerCase() === 'true' || i === 0 || i === lines.length - 1,
+      };
+    });
+    setWaypoints(imported);
+    setSelectedLeg(0);
+    setIoMessage(t('importDone', 'Route imported.'));
+  };
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const content = String(reader.result ?? '');
+      setImportText(content);
+      importRoute(content);
+    };
+    reader.readAsText(file);
+    e.target.value = '';
   };
 
   const VESSEL_NAME = selectedVoyage?.vessel ?? 'MV Atlantic Voyager';
@@ -310,6 +373,8 @@ export function RouteEditorPage() {
         </ul>
       </header>
 
+      <RouteEditingTabs />
+
       {/* Import / Export --------------------------------------------- */}
       <section id="import-export" className="fv-route__section">
         <header className="fv-route__section-header">
@@ -318,16 +383,20 @@ export function RouteEditorPage() {
             <button type="button" className="fv-route__btn" onClick={exportRoute}>
               <i className="fas fa-file-export" aria-hidden="true" /> {t('export', 'Export')}
             </button>
-            <button type="button" className="fv-route__btn" onClick={downloadRoute}>
-              <i className="fas fa-download" aria-hidden="true" /> {t('download', 'Download')}
-            </button>
             <button
               type="button"
               className="fv-route__btn fv-route__btn--primary"
-              onClick={importRoute}
+              onClick={() => fileInputRef.current?.click()}
             >
               <i className="fas fa-file-import" aria-hidden="true" /> {t('import', 'Import')}
             </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".csv,.json,text/csv"
+              style={{ display: 'none' }}
+              onChange={handleFile}
+            />
             {/* eslint-disable-next-line jsx-a11y/anchor-has-content */}
             <a ref={downloadRef} style={{ display: 'none' }} aria-hidden="true" />
           </div>
@@ -337,7 +406,7 @@ export function RouteEditorPage() {
           rows={6}
           placeholder={t(
             'ioPlaceholder',
-            'Paste route JSON here to import, or click Export to dump the current route.',
+            'Click Export to download a CSV of every waypoint, or paste CSV here and click Import.',
           )}
           value={importText}
           onChange={(e) => setImportText(e.target.value)}

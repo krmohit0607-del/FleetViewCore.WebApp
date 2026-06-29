@@ -224,6 +224,14 @@ export const VESSEL_TYPE_OPTIONS = [
 ];
 export const LEG_VOYAGE_TYPE_OPTIONS = ['Delivery', 'Ballast', 'Laden', 'Redelivery'];
 export const LEG_STATUS_OPTIONS = ['Planning', 'Active', 'Complete'];
+export const CP_CURRENTS_OPTIONS = [
+  'All Adverse Currents & No Effect of Favorable Currents',
+  'All Currents',
+  'No Adverse Currents',
+  'No Adverse Currents & No Effect of Favorable Currents',
+  'No Currents',
+];
+export const CP_GOOD_WEATHER_OPTIONS = ['50%', '75%', 'Standard'];
 export const OPTIMIZATION_MODE_OPTIONS = [
   'Min Fuel',
   'Min Time',

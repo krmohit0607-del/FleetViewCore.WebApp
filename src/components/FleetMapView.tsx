@@ -1,9 +1,8 @@
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { MapContainer, Marker, Polyline, TileLayer, Tooltip } from 'react-leaflet';
 import L from 'leaflet';
 
 import { PORT_COORDS } from '../data/fleet';
-import { generateSeaRoute } from '../data/seaRoute';
 import { writeSelectedVoyageId } from '../data/selectedVoyage';
 import { AreaConstraintsControl } from './AreaConstraintsControl';
 import { WeatherFieldControl } from './WeatherFieldControl';
@@ -110,32 +109,6 @@ interface PlacedVessel extends MapVessel {
 
 export function FleetMapView({ vessels, theme = 'dark' }: FleetMapViewProps) {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
-  // Real water-route geometry per vessel, computed lazily on first hover.
-  const [routes, setRoutes] = useState<Record<string, [number, number][]>>({});
-  const requested = useRef<Set<string>>(new Set());
-
-  const requestRoute = (
-    id: string,
-    from: [number, number] | undefined,
-    to: [number, number] | undefined,
-  ) => {
-    if (!from || !to || requested.current.has(id)) return;
-    requested.current.add(id);
-    generateSeaRoute(
-      { lat: from[0], lon: from[1] },
-      { lat: to[0], lon: to[1] },
-    )
-      .then((pts) => {
-        setRoutes((prev) => ({
-          ...prev,
-          [id]: pts.map((p) => [p.lat, p.lon] as [number, number]),
-        }));
-      })
-      .catch(() => {
-        // No water path found — fall back to the straight leg on render.
-        requested.current.delete(id);
-      });
-  };
 
   const placed = useMemo<PlacedVessel[]>(() => {
     return vessels.map((v) => {
@@ -178,7 +151,7 @@ export function FleetMapView({ vessels, theme = 'dark' }: FleetMapViewProps) {
           hoveredId === v.id && v.from && v.to ? (
             <Polyline
               key={`passage-${v.id}`}
-              positions={routes[v.id] ?? [v.from, v.to]}
+              positions={[v.from, v.to]}
               pathOptions={{
                 color: priorityColor(v.priority),
                 weight: 2,
@@ -201,7 +174,6 @@ export function FleetMapView({ vessels, theme = 'dark' }: FleetMapViewProps) {
             eventHandlers={{
               mouseover: () => {
                 setHoveredId(v.id);
-                requestRoute(v.id, v.from, v.to);
               },
               mouseout: () => setHoveredId((cur) => (cur === v.id ? null : cur)),
               click: () => {

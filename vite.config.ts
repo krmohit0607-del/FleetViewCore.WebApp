@@ -29,6 +29,13 @@ export default defineConfig({
       '/swagger': { target: BACKEND, changeOrigin: true, secure: false },
       '/MicrosoftIdentity': { target: BACKEND, changeOrigin: true, secure: false },
       '/signin-microsoft': { target: BACKEND, changeOrigin: true, secure: false },
+      // NGA World Port Index — proxied to stay same-origin (avoids CORS).
+      '/wpi': {
+        target: 'https://msi.nga.mil',
+        changeOrigin: true,
+        secure: false,
+        rewrite: (p) => p.replace(/^\/wpi/, ''),
+      },
       '/interimhub': {
         target: BACKEND,
         changeOrigin: true,

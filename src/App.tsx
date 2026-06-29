@@ -18,7 +18,7 @@ import { PassageDetailsPage } from './components/PassageDetailsPage';
 import { CreateVoyagePage } from './components/CreateVoyagePage';
 import { RouteExplorerPage } from './components/RouteExplorerPage';
 import { RouteEditorPage } from './components/RouteEditorPage';
-import { PlotRoutePage } from './components/PlotRoutePage';
+
 import { RouteSimulatorPage } from './components/RouteSimulatorPage';
 import { VoyageOverviewMap } from './components/VoyageOverviewMap';
 import { VesselRoutePage } from './components/VesselRoutePage';
@@ -160,14 +160,6 @@ export function App() {
               element={
                 <Layout>
                   <RouteEditorPage />
-                </Layout>
-              }
-            />
-            <Route
-              path="/plot-route"
-              element={
-                <Layout>
-                  <PlotRoutePage />
                 </Layout>
               }
             />

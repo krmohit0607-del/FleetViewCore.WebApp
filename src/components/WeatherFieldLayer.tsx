@@ -7,6 +7,7 @@ import {
   rampColor,
   sampleWeatherField,
 } from '../data/weatherField';
+import { ensureLiveData, hasLiveSource, sampleLiveField } from '../data/openMeteo';
 
 /**
  * MarineTraffic-style weather field, drawn on a canvas over the map.
@@ -27,12 +28,15 @@ export function WeatherFieldLayer({
   factorId,
   showField = true,
   showArrows = true,
+  hour = 0,
 }: {
   factorId: string;
   /** Paint the filled colour field (set false to draw only arrows). */
   showField?: boolean;
   /** Draw direction/magnitude arrows for vector factors. */
   showArrows?: boolean;
+  /** Hours ahead of now to forecast (0 = current conditions). */
+  hour?: number;
 }) {
   const map = useMap();
 
@@ -63,11 +67,36 @@ export function WeatherFieldLayer({
 
     let raf = 0;
 
+    // Pull live values from Open-Meteo when available, otherwise fall back
+    // to the deterministic synthetic field (e.g. while a grid is loading).
+    const sample = (lat: number, lon: number) => {
+      const b = map.getBounds();
+      const bounds = {
+        south: b.getSouth(),
+        west: b.getWest(),
+        north: b.getNorth(),
+        east: b.getEast(),
+      };
+      const live = sampleLiveField(lat, lon, factorId, bounds, hour);
+      return live ?? sampleWeatherField(lat, lon, factorId);
+    };
+
     const draw = () => {
       const size = map.getSize();
       const w = size.x;
       const h = size.y;
       if (w === 0 || h === 0) return;
+
+      // Ensure live data for the current view; redraw once it arrives.
+      if (hasLiveSource(factorId)) {
+        const b = map.getBounds();
+        ensureLiveData(
+          factorId,
+          { south: b.getSouth(), west: b.getWest(), north: b.getNorth(), east: b.getEast() },
+          hour,
+          () => schedule(),
+        );
+      }
       const dpr = window.devicePixelRatio || 1;
       canvas.width = Math.round(w * dpr);
       canvas.height = Math.round(h * dpr);
@@ -89,7 +118,7 @@ export function WeatherFieldLayer({
           for (let x = 0; x < w; x += cell) {
             if (isWater && !isWater(x + cell / 2, y + cell / 2)) continue;
             const ll = map.containerPointToLatLng([x + cell / 2, y + cell / 2]);
-            const s = sampleWeatherField(ll.lat, ll.lng, factorId);
+            const s = sample(ll.lat, ll.lng);
             const frac = s.magnitude / factor.max;
             ctx.fillStyle = rampColor(factor.stops, frac, 0.5);
             ctx.fillRect(x, y, cell + 1, cell + 1);
@@ -106,7 +135,7 @@ export function WeatherFieldLayer({
           for (let x = step / 2; x < w; x += step) {
             if (isWater && !isWater(x, y)) continue;
             const ll = map.containerPointToLatLng([x, y]);
-            const s = sampleWeatherField(ll.lat, ll.lng, factorId);
+            const s = sample(ll.lat, ll.lng);
             const frac = Math.max(0, Math.min(1, s.magnitude / factor.max));
             const len = 10 + frac * 16;
             drawArrow(ctx, x, y, s.directionDeg, len, rampColor(factor.stops, frac, 0.95));
@@ -144,7 +173,7 @@ export function WeatherFieldLayer({
       window.clearTimeout(t2);
       canvas.remove();
     };
-  }, [map, factorId, showField, showArrows]);
+  }, [map, factorId, showField, showArrows, hour]);
 
   return null;
 }

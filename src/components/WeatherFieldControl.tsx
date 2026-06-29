@@ -4,6 +4,7 @@ import { useMap } from 'react-leaflet';
 import L, { type ControlPosition } from 'leaflet';
 
 import { FIELD_FACTORS, getFieldFactor } from '../data/weatherField';
+import { MAX_FORECAST_HOURS } from '../data/openMeteo';
 import { WeatherFieldLayer } from './WeatherFieldLayer';
 
 /**
@@ -21,6 +22,7 @@ import { WeatherFieldLayer } from './WeatherFieldLayer';
 
 const ON_KEY = 'fv.map.weatherField.on';
 const FACTORS_KEY = 'fv.map.weatherField.factors';
+const HOUR_KEY = 'fv.map.weatherField.hour';
 const EVENT = 'fv-weatherfield-change';
 
 function readOn(): boolean {
@@ -49,6 +51,22 @@ function readFactors(): string[] {
 
 function broadcast() {
   window.dispatchEvent(new Event(EVENT));
+}
+
+function readHour(): number {
+  try {
+    const n = Number(localStorage.getItem(HOUR_KEY));
+    return Number.isFinite(n) ? Math.max(0, Math.min(MAX_FORECAST_HOURS, n)) : 0;
+  } catch {
+    return 0;
+  }
+}
+
+/** Label like "Now" or "Tue 14:00" for an hour offset from now. */
+function hourLabel(offset: number): string {
+  if (offset <= 0) return 'Now';
+  const d = new Date(Date.now() + offset * 3600_000);
+  return d.toLocaleString(undefined, { weekday: 'short', hour: '2-digit', minute: '2-digit' });
 }
 
 /** Renders React children into a real Leaflet control container. */
@@ -88,12 +106,14 @@ export function WeatherFieldControl({
   const [open, setOpen] = useState(false);
   const [on, setOn] = useState<boolean>(() => readOn());
   const [factorIds, setFactorIds] = useState<string[]>(() => readFactors());
+  const [hour, setHour] = useState<number>(() => readHour());
 
   // Keep every mounted control in sync via the shared event + storage.
   useEffect(() => {
     const sync = () => {
       setOn(readOn());
       setFactorIds(readFactors());
+      setHour(readHour());
     };
     window.addEventListener(EVENT, sync);
     window.addEventListener('storage', sync);
@@ -131,6 +151,16 @@ export function WeatherFieldControl({
     if (next.length && !on) updateOn(true);
   };
 
+  const persistHour = (h: number) => {
+    setHour(h);
+    try {
+      localStorage.setItem(HOUR_KEY, String(h));
+    } catch {
+      /* ignore */
+    }
+    broadcast();
+  };
+
   // The first selected factor paints the colour field; the legend follows it.
   const primary = getFieldFactor(factorIds[0]) ?? FIELD_FACTORS[0];
 
@@ -138,7 +168,7 @@ export function WeatherFieldControl({
     <>
       {on &&
         factorIds.map((id, i) => (
-          <WeatherFieldLayer key={id} factorId={id} showField={i === 0} />
+          <WeatherFieldLayer key={id} factorId={id} showField={i === 0} hour={hour} />
         ))}
       <ControlPortal position={position}>
         <button
@@ -182,6 +212,22 @@ export function WeatherFieldControl({
                   )}
                 </label>
               ))}
+            </div>
+
+            <div className="fv-wf-control__time">
+              <div className="fv-wf-control__time-head">
+                <span>Forecast</span>
+                <span className="fv-wf-control__time-val">{hourLabel(hour)}</span>
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={MAX_FORECAST_HOURS}
+                step={1}
+                value={hour}
+                onChange={(e) => persistHour(Number(e.target.value))}
+                className="fv-wf-control__time-slider"
+              />
             </div>
 
             <div className="fv-wf-control__legend">

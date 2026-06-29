@@ -1,11 +1,13 @@
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useRef, useState } from 'react';
 
 import { useL } from '../i18n/LocalizationProvider';
 import { useSelectedVoyage } from '../data/selectedVoyage';
 import { PORT_COORDS } from '../data/fleet';
-import { generateSeaRoute } from '../data/seaRoute';
+import { useWorldPorts, resolveWorldPort, type WorldPort } from '../data/ports';
 import { RouteEditorMap, type EditorPoint } from './RouteEditorMap';
 import { WeatherControls } from './WeatherControls';
+import { RouteEditingTabs } from './RouteEditingTabs';
+import { PortInput } from './PortInput';
 
 /**
  * Route Explorer page — `/route-explorer`.
@@ -231,9 +233,14 @@ function writeSavedRoutes(routes: SavedRoute[]): void {
 }
 
 /** Resolve a port name or a free "lat, lon" string to decimal coords. */
-function resolveLocation(raw: string): { lat: number; lon: number; name: string } | null {
+function resolveLocation(
+  raw: string,
+  worldPorts: WorldPort[],
+): { lat: number; lon: number; name: string } | null {
   const text = raw.trim();
   if (!text) return null;
+  const wp = resolveWorldPort(text, worldPorts);
+  if (wp) return { lat: wp.lat, lon: wp.lon, name: wp.name };
   const portKey = Object.keys(PORT_COORDS).find(
     (k) => k.toLowerCase() === text.toLowerCase(),
   );
@@ -286,7 +293,8 @@ export function RouteExplorerPage() {
 
   const [waypoints, setWaypoints] = useState<Waypoint[]>(STUB_WAYPOINTS);
   const [selected, setSelected] = useState<string[]>([]);
-  const [bulkSpeed, setBulkSpeed] = useState<number>(12);
+  const selectedWaypoint =
+    selected.length === 1 ? waypoints.find((w) => w.id === selected[0]) : undefined;
 
   // --- Map plotting + saved routes ---------------------------------
   const [plotMode, setPlotMode] = useState(false);
@@ -298,11 +306,12 @@ export function RouteExplorerPage() {
   const [arrInput, setArrInput] = useState(selectedVoyage?.portTo ?? '');
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState('');
+  const worldPorts = useWorldPorts();
 
   const generateRoute = async () => {
     setGenError('');
-    const from = resolveLocation(depInput);
-    const to = resolveLocation(arrInput);
+    const from = resolveLocation(depInput, worldPorts);
+    const to = resolveLocation(arrInput, worldPorts);
     if (!from || !to) {
       setGenError(
         t(
@@ -314,30 +323,33 @@ export function RouteExplorerPage() {
     }
     setGenerating(true);
     try {
-      const path = await generateSeaRoute(
-        { lat: from.lat, lon: from.lon },
-        { lat: to.lat, lon: to.lon },
-      );
-      const built: Waypoint[] = path.map((p, i) => {
-        const isFirst = i === 0;
-        const isLast = i === path.length - 1;
-        return {
-          id: `wp-${Date.now()}-${i}`,
-          name: isFirst
-            ? `${from.name} (Departure)`
-            : isLast
-              ? `${to.name} (Arrival)`
-              : `Waypoint ${i}`,
-          lat: decToDM(p.lat, true),
-          lon: decToDM(p.lon, false),
+      // Straight line from departure to arrival.
+      const built: Waypoint[] = [
+        {
+          id: `wp-${Date.now()}-0`,
+          name: `${from.name} (Departure)`,
+          lat: decToDM(from.lat, true),
+          lon: decToDM(from.lon, false),
           course: 0,
           speed: 12,
           distanceFromPrev: 0,
           eta: '',
           drift: false,
-          isPort: isFirst || isLast,
-        };
-      });
+          isPort: true,
+        },
+        {
+          id: `wp-${Date.now()}-1`,
+          name: `${to.name} (Arrival)`,
+          lat: decToDM(to.lat, true),
+          lon: decToDM(to.lon, false),
+          course: 0,
+          speed: 12,
+          distanceFromPrev: 0,
+          eta: '',
+          drift: false,
+          isPort: true,
+        },
+      ];
       setWaypoints(recomputeGeometry(built));
       setSelected([]);
       setPlotMode(false);
@@ -449,38 +461,6 @@ export function RouteExplorerPage() {
     });
   };
 
-  /** Insert a blank waypoint into the table right after `index`. */
-  const insertWaypointAfter = (index: number) => {
-    setWaypoints((prev) => {
-      const a = prev[index];
-      const b = prev[index + 1];
-      const alat = a ? dmToDec(a.lat) : NaN;
-      const alon = a ? dmToDec(a.lon) : NaN;
-      const blat = b ? dmToDec(b.lat) : NaN;
-      const blon = b ? dmToDec(b.lon) : NaN;
-      // Midpoint of the two neighbours when both have valid coords.
-      const lat =
-        !Number.isNaN(alat) && !Number.isNaN(blat) ? (alat + blat) / 2 : alat;
-      const lon =
-        !Number.isNaN(alon) && !Number.isNaN(blon) ? (alon + blon) / 2 : alon;
-      const newWp: Waypoint = {
-        id: `wp-${Date.now()}`,
-        name: `Waypoint ${prev.length + 1}`,
-        lat: Number.isNaN(lat) ? a?.lat ?? "00° 00.0' N" : decToDM(lat, true),
-        lon: Number.isNaN(lon) ? a?.lon ?? "000° 00.0' E" : decToDM(lon, false),
-        course: 0,
-        speed: a?.speed ?? 12,
-        distanceFromPrev: 0,
-        eta: a?.eta ?? '',
-        drift: false,
-        isPort: false,
-      };
-      const next = [...prev];
-      next.splice(index + 1, 0, newWp);
-      return recomputeGeometry(next);
-    });
-  };
-
   const saveRoute = () => {
     const name = routeName.trim() || `Route ${savedRoutes.length + 1}`;
     const route: SavedRoute = {
@@ -514,6 +494,98 @@ export function RouteExplorerPage() {
     setSelected([]);
   };
 
+  // --- CSV import / export -----------------------------------------
+  const downloadRef = useRef<HTMLAnchorElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const exportRoute = () => {
+    const header = 'name,lat,lon,speed,drift,isPort';
+    const rows = waypoints.map((wp) => {
+      const name = `"${wp.name.replace(/"/g, '""')}"`;
+      return [
+        name,
+        dmToDec(wp.lat).toFixed(5),
+        dmToDec(wp.lon).toFixed(5),
+        wp.speed,
+        wp.drift,
+        wp.isPort,
+      ].join(',');
+    });
+    const csv = [header, ...rows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = downloadRef.current;
+    if (a) {
+      a.href = url;
+      a.download = 'expected-route.csv';
+      a.click();
+    }
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
+  /** Split a CSV line, honouring quoted fields with embedded commas. */
+  const parseCsvLine = (line: string): string[] => {
+    const out: string[] = [];
+    let cur = '';
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i += 1) {
+      const ch = line[i];
+      if (inQuotes) {
+        if (ch === '"' && line[i + 1] === '"') {
+          cur += '"';
+          i += 1;
+        } else if (ch === '"') {
+          inQuotes = false;
+        } else {
+          cur += ch;
+        }
+      } else if (ch === '"') {
+        inQuotes = true;
+      } else if (ch === ',') {
+        out.push(cur);
+        cur = '';
+      } else {
+        cur += ch;
+      }
+    }
+    out.push(cur);
+    return out;
+  };
+
+  const importRoute = (text: string) => {
+    const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+    if (lines.length && /name\s*,\s*lat/i.test(lines[0])) lines.shift();
+    if (lines.length < 2) return;
+    const imported: Waypoint[] = lines.map((line, i) => {
+      const [name, lat, lon, speed, drift, isPort] = parseCsvLine(line);
+      return {
+        id: `wp-${Date.now()}-${i}`,
+        name: (name ?? `Waypoint ${i + 1}`).trim(),
+        lat: decToDM(Number(lat) || 0, true),
+        lon: decToDM(Number(lon) || 0, false),
+        course: 0,
+        speed: Number(speed) || 0,
+        distanceFromPrev: 0,
+        eta: '',
+        drift: String(drift).trim().toLowerCase() === 'true',
+        isPort:
+          String(isPort).trim().toLowerCase() === 'true' || i === 0 || i === lines.length - 1,
+      };
+    });
+    setWaypoints(recomputeGeometry(imported));
+    setSelected([]);
+    setPlotMode(false);
+  };
+
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => importRoute(String(reader.result ?? ''));
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
   const totalDistance = useMemo(
     () => waypoints.reduce((acc, wp) => acc + wp.distanceFromPrev, 0),
     [waypoints],
@@ -529,62 +601,6 @@ export function RouteExplorerPage() {
     setWaypoints((prev) =>
       prev.map((wp) => (wp.id === id ? { ...wp, [key]: value } : wp)),
     );
-  };
-
-  const toggleSelected = (id: string) => {
-    setSelected((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
-    );
-  };
-
-  const selectAll = () => {
-    setSelected(
-      selected.length === waypoints.length ? [] : waypoints.map((wp) => wp.id),
-    );
-  };
-
-  const deleteSelected = () => {
-    if (selected.length === 0) return;
-    setWaypoints((prev) =>
-      // Keep the departure / arrival ports; only remove selected waypoints.
-      recomputeGeometry(
-        prev.filter((wp) => !selected.includes(wp.id) || wp.isPort),
-      ),
-    );
-    setSelected([]);
-  };
-
-  const setSpeedOnSelected = () => {
-    if (selected.length === 0) return;
-    setWaypoints((prev) =>
-      prev.map((wp) => (selected.includes(wp.id) ? { ...wp, speed: bulkSpeed } : wp)),
-    );
-  };
-
-  const toggleDriftOnSelected = () => {
-    if (selected.length === 0) return;
-    setWaypoints((prev) =>
-      prev.map((wp) =>
-        selected.includes(wp.id) ? { ...wp, drift: !wp.drift } : wp,
-      ),
-    );
-  };
-
-  const addWaypoint = () => {
-    const last = waypoints[waypoints.length - 1];
-    const newWp: Waypoint = {
-      id: `wp-${Date.now()}`,
-      name: `Waypoint ${waypoints.length + 1}`,
-      lat: last?.lat ?? '00° 00.0\' N',
-      lon: last?.lon ?? '000° 00.0\' E',
-      course: last?.course ?? 0,
-      speed: last?.speed ?? 12,
-      distanceFromPrev: 0,
-      eta: last?.eta ?? '',
-      drift: false,
-      isPort: false,
-    };
-    setWaypoints((prev) => [...prev, newWp]);
   };
 
   return (
@@ -624,40 +640,35 @@ export function RouteExplorerPage() {
         </ul>
       </header>
 
+      <RouteEditingTabs />
+
       {/* Auto sea-route generator ------------------------------------ */}
       <section className="fv-route__section">
         <header className="fv-route__section-header">
           <h2>{t('autoRoute', 'Generate Optimized Sea Route')}</h2>
         </header>
         <div className="fv-route__gen">
-          <datalist id="fv-route-ports">
-            {Object.keys(PORT_COORDS).map((p) => (
-              <option key={p} value={p} />
-            ))}
-          </datalist>
           <label className="fv-route__gen-field">
             <span>
               <i className="fas fa-anchor-circle-check" aria-hidden="true" />{' '}
               {t('departure', 'Departure')}
             </span>
-            <input
-              type="text"
-              list="fv-route-ports"
+            <PortInput
+              ports={worldPorts}
               placeholder={t('portOrLatLon', 'Port name or "lat, lon"')}
               value={depInput}
-              onChange={(e) => setDepInput(e.target.value)}
+              onChange={setDepInput}
             />
           </label>
           <label className="fv-route__gen-field">
             <span>
               <i className="fas fa-anchor" aria-hidden="true" /> {t('arrival', 'Arrival')}
             </span>
-            <input
-              type="text"
-              list="fv-route-ports"
+            <PortInput
+              ports={worldPorts}
               placeholder={t('portOrLatLon', 'Port name or "lat, lon"')}
               value={arrInput}
-              onChange={(e) => setArrInput(e.target.value)}
+              onChange={setArrInput}
             />
           </label>
           <button
@@ -729,33 +740,34 @@ export function RouteExplorerPage() {
             >
               <i className="fas fa-eraser" aria-hidden="true" /> {t('clear', 'Clear')}
             </button>
+            <button
+              type="button"
+              className="fv-route__btn"
+              onClick={exportRoute}
+              disabled={waypoints.length === 0}
+            >
+              <i className="fas fa-file-export" aria-hidden="true" /> {t('export', 'Export')}
+            </button>
+            <button
+              type="button"
+              className="fv-route__btn"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <i className="fas fa-file-import" aria-hidden="true" /> {t('import', 'Import')}
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".csv,.json,text/csv"
+              style={{ display: 'none' }}
+              onChange={handleFile}
+            />
+            {/* eslint-disable-next-line jsx-a11y/anchor-has-content */}
+            <a ref={downloadRef} style={{ display: 'none' }} aria-hidden="true" />
           </div>
         </header>
 
         <div className="fv-route__map-layout">
-          <div className="fv-route__map-wrap">
-            <RouteEditorMap
-              points={mapPoints}
-              plotMode={plotMode}
-              selected={selected}
-              onAddPoint={addPointFromMap}
-              onInsertPoint={insertPointFromMap}
-              onMovePoint={moveWaypoint}
-              onSelectPoint={toggleSelected}
-              onDeletePoint={deletePoint}
-            />
-            <WeatherControls />
-            {plotMode && (
-              <div className="fv-route__map-hint">
-                <i className="fas fa-info-circle" aria-hidden="true" />{' '}
-                {t(
-                  'plotBanner',
-                  'Click empty sea to add a waypoint at the end, or click the route line to insert one in between. Drag pins to adjust.',
-                )}
-              </div>
-            )}
-          </div>
-
           <aside className="fv-route__side-panel" aria-label={t('expectedRoute', 'Expected Route')}>
             <header className="fv-route__side-head">
               <h3>
@@ -778,52 +790,164 @@ export function RouteExplorerPage() {
                   </thead>
                   <tbody>
                     {waypoints.map((wp, idx) => (
-                      <tr
-                        key={wp.id}
-                        className={selected.includes(wp.id) ? 'fv-route__side-row--selected' : ''}
-                        onClick={() => toggleSelected(wp.id)}
-                      >
-                        <td className="fv-route__side-row-num">
-                          {wp.isPort ? (
-                            <i
-                              className={`fas ${
-                                idx === 0 ? 'fa-anchor-circle-check' : 'fa-anchor'
-                              }`}
-                              aria-hidden="true"
-                            />
-                          ) : (
-                            idx + 1
-                          )}
-                        </td>
-                        <td>
-                          <input
-                            type="text"
-                            className="fv-route__side-input"
-                            value={wp.lat}
-                            aria-label={`${wp.name} latitude`}
-                            onClick={(e) => e.stopPropagation()}
-                            onChange={(e) => updateWaypoint(wp.id, 'lat', e.target.value)}
-                            onBlur={() => setWaypoints((prev) => recomputeGeometry(prev))}
-                          />
-                        </td>
-                        <td>
-                          <input
-                            type="text"
-                            className="fv-route__side-input"
-                            value={wp.lon}
-                            aria-label={`${wp.name} longitude`}
-                            onClick={(e) => e.stopPropagation()}
-                            onChange={(e) => updateWaypoint(wp.id, 'lon', e.target.value)}
-                            onBlur={() => setWaypoints((prev) => recomputeGeometry(prev))}
-                          />
-                        </td>
-                      </tr>
+                      <Fragment key={wp.id}>
+                        <tr
+                          className={selected.includes(wp.id) ? 'fv-route__side-row--selected' : ''}
+                          onClick={() => setSelected(selected[0] === wp.id ? [] : [wp.id])}
+                        >
+                          <td className="fv-route__side-row-num">
+                            {wp.isPort ? (
+                              <i
+                                className={`fas ${
+                                  idx === 0 ? 'fa-anchor-circle-check' : 'fa-anchor'
+                                }`}
+                                aria-hidden="true"
+                              />
+                            ) : (
+                              idx + 1
+                            )}
+                          </td>
+                          <td>{wp.lat}</td>
+                          <td>{wp.lon}</td>
+                        </tr>
+                        {selectedWaypoint?.id === wp.id && (
+                          <tr className="fv-route__wp-detail-row-cell">
+                            <td colSpan={3}>
+                              <div className="fv-route__wp-detail">
+                                <div className="fv-route__wp-detail-head">
+                                  <i className="fas fa-location-dot" aria-hidden="true" />{' '}
+                                  {t('waypointDetails', 'Waypoint details')}
+                                </div>
+                                <label className="fv-route__wp-detail-field">
+                                  <span>{t('waypointName', 'Waypoint')}</span>
+                                  <input
+                                    type="text"
+                                    value={selectedWaypoint.name}
+                                    onChange={(e) =>
+                                      updateWaypoint(selectedWaypoint.id, 'name', e.target.value)
+                                    }
+                                  />
+                                </label>
+                                <div className="fv-route__wp-detail-row">
+                                  <label className="fv-route__wp-detail-field">
+                                    <span>{t('lat', 'Lat')}</span>
+                                    <input
+                                      type="text"
+                                      value={selectedWaypoint.lat}
+                                      onChange={(e) =>
+                                        updateWaypoint(selectedWaypoint.id, 'lat', e.target.value)
+                                      }
+                                      onBlur={() => setWaypoints((prev) => recomputeGeometry(prev))}
+                                    />
+                                  </label>
+                                  <label className="fv-route__wp-detail-field">
+                                    <span>{t('lon', 'Lon')}</span>
+                                    <input
+                                      type="text"
+                                      value={selectedWaypoint.lon}
+                                      onChange={(e) =>
+                                        updateWaypoint(selectedWaypoint.id, 'lon', e.target.value)
+                                      }
+                                      onBlur={() => setWaypoints((prev) => recomputeGeometry(prev))}
+                                    />
+                                  </label>
+                                </div>
+                                <div className="fv-route__wp-detail-row">
+                                  <label className="fv-route__wp-detail-field">
+                                    <span>{t('course', 'Course')}</span>
+                                    <input
+                                      type="number"
+                                      value={selectedWaypoint.course}
+                                      onChange={(e) =>
+                                        updateWaypoint(
+                                          selectedWaypoint.id,
+                                          'course',
+                                          Number(e.target.value) || 0,
+                                        )
+                                      }
+                                    />
+                                  </label>
+                                  <label className="fv-route__wp-detail-field">
+                                    <span>{t('speed', 'Speed')}</span>
+                                    <input
+                                      type="number"
+                                      step="0.1"
+                                      value={selectedWaypoint.speed}
+                                      disabled={selectedWaypoint.drift}
+                                      onChange={(e) =>
+                                        updateWaypoint(
+                                          selectedWaypoint.id,
+                                          'speed',
+                                          Number(e.target.value) || 0,
+                                        )
+                                      }
+                                    />
+                                  </label>
+                                </div>
+                                <label className="fv-route__wp-detail-field">
+                                  <span>{t('eta', 'ETA')}</span>
+                                  <input
+                                    type="datetime-local"
+                                    value={selectedWaypoint.eta}
+                                    onChange={(e) =>
+                                      updateWaypoint(selectedWaypoint.id, 'eta', e.target.value)
+                                    }
+                                  />
+                                </label>
+                                <label className="fv-route__wp-detail-toggle">
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedWaypoint.drift}
+                                    onChange={(e) =>
+                                      updateWaypoint(selectedWaypoint.id, 'drift', e.target.checked)
+                                    }
+                                  />
+                                  <span>
+                                    {selectedWaypoint.drift ? t('drift', 'Drift') : t('sail', 'Sail')}
+                                  </span>
+                                </label>
+                                <button
+                                  type="button"
+                                  className="fv-route__btn fv-route__btn--danger"
+                                  onClick={() => deletePoint(selectedWaypoint.id)}
+                                  disabled={selectedWaypoint.isPort}
+                                >
+                                  <i className="fas fa-trash" aria-hidden="true" />{' '}
+                                  {t('delete', 'Delete')}
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
                     ))}
                   </tbody>
                 </table>
               )}
             </div>
           </aside>
+
+          <div className="fv-route__map-wrap">
+            <RouteEditorMap
+              points={mapPoints}
+              plotMode={plotMode}
+              selected={selected}
+              onAddPoint={addPointFromMap}
+              onInsertPoint={insertPointFromMap}
+              onMovePoint={moveWaypoint}
+              onDeletePoint={deletePoint}
+            />
+            <WeatherControls />
+            {plotMode && (
+              <div className="fv-route__map-hint">
+                <i className="fas fa-info-circle" aria-hidden="true" />{' '}
+                {t(
+                  'plotBanner',
+                  'Click empty sea to add a waypoint at the end, or click the route line to insert one in between. Drag pins to adjust.',
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
         {savedRoutes.length > 0 && (
@@ -856,206 +980,6 @@ export function RouteExplorerPage() {
             </ul>
           </div>
         )}
-      </section>
-
-      <section className="fv-route__section">
-        <header className="fv-route__section-header">
-          <h2>{t('expectedRoute', 'Expected Route')}</h2>
-          <div className="fv-route__bulk">
-            <span className="fv-route__bulk-count">
-              {selected.length} {t('selected', 'selected')}
-            </span>
-            <label className="fv-route__bulk-speed">
-              <span>{t('setSpeed', 'Set speed')}</span>
-              <input
-                type="number"
-                step="0.1"
-                value={bulkSpeed}
-                onChange={(e) => setBulkSpeed(Number(e.target.value) || 0)}
-              />
-              <span>kt</span>
-            </label>
-            <button
-              type="button"
-              className="fv-route__btn"
-              onClick={setSpeedOnSelected}
-              disabled={selected.length === 0}
-            >
-              {t('apply', 'Apply')}
-            </button>
-            <button
-              type="button"
-              className="fv-route__btn"
-              onClick={toggleDriftOnSelected}
-              disabled={selected.length === 0}
-              title={t('driftToggleHint', 'Toggle drift / sail on selected waypoints')}
-            >
-              <i className="fas fa-water" aria-hidden="true" />{' '}
-              {t('drift', 'Drift')}
-            </button>
-            <button
-              type="button"
-              className="fv-route__btn fv-route__btn--danger"
-              onClick={deleteSelected}
-              disabled={selected.length === 0}
-            >
-              <i className="fas fa-trash" aria-hidden="true" />{' '}
-              {t('delete', 'Delete')}
-            </button>
-            <button type="button" className="fv-route__btn" onClick={addWaypoint}>
-              <i className="fas fa-plus" aria-hidden="true" />{' '}
-              {t('addWaypoint', 'Add WP')}
-            </button>
-          </div>
-        </header>
-
-        <div className="fv-route__wp-scroll">
-          <table className="fv-route__wp-table">
-            <thead>
-              <tr>
-                <th className="fv-route__center">
-                  <input
-                    type="checkbox"
-                    checked={
-                      selected.length === waypoints.length && waypoints.length > 0
-                    }
-                    onChange={selectAll}
-                    aria-label={t('selectAll', 'Select all')}
-                  />
-                </th>
-                <th>#</th>
-                <th>{t('waypointName', 'Waypoint')}</th>
-                <th>{t('lat', 'Lat')}</th>
-                <th>{t('lon', 'Lon')}</th>
-                <th>{t('course', 'Course')}</th>
-                <th>{t('speed', 'Speed')}</th>
-                <th>{t('distFromPrev', 'Dist from prev')}</th>
-                <th>{t('eta', 'ETA')}</th>
-                <th>{t('mode', 'Mode')}</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {waypoints.map((wp, idx) => {
-                const isSelected = selected.includes(wp.id);
-                return (
-                  <tr
-                    key={wp.id}
-                    className={`${isSelected ? 'fv-route__wp-row--selected' : ''}${
-                      wp.drift ? ' fv-route__wp-row--drift' : ''
-                    }`}
-                  >
-                    <td className="fv-route__center">
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={() => toggleSelected(wp.id)}
-                        aria-label={`Select ${wp.name}`}
-                      />
-                    </td>
-                    <td className="fv-route__wp-num">
-                      {idx + 1}
-                      {wp.isPort && (
-                        <span className="fv-route__wp-port" title="Port">
-                          <i className="fas fa-anchor" aria-hidden="true" />
-                        </span>
-                      )}
-                    </td>
-                    <td>
-                      <input
-                        type="text"
-                        value={wp.name}
-                        onChange={(e) => updateWaypoint(wp.id, 'name', e.target.value)}
-                      />
-                    </td>
-                    <td>
-                      <input
-                        type="text"
-                        value={wp.lat}
-                        onChange={(e) => updateWaypoint(wp.id, 'lat', e.target.value)}
-                      />
-                    </td>
-                    <td>
-                      <input
-                        type="text"
-                        value={wp.lon}
-                        onChange={(e) => updateWaypoint(wp.id, 'lon', e.target.value)}
-                      />
-                    </td>
-                    <td>
-                      <input
-                        type="number"
-                        value={wp.course}
-                        onChange={(e) =>
-                          updateWaypoint(wp.id, 'course', Number(e.target.value) || 0)
-                        }
-                      />
-                    </td>
-                    <td>
-                      <input
-                        type="number"
-                        step="0.1"
-                        value={wp.speed}
-                        onChange={(e) =>
-                          updateWaypoint(wp.id, 'speed', Number(e.target.value) || 0)
-                        }
-                        disabled={wp.drift}
-                      />
-                    </td>
-                    <td className="fv-route__num">{formatNumber(wp.distanceFromPrev)}</td>
-                    <td>
-                      <input
-                        type="datetime-local"
-                        value={wp.eta}
-                        onChange={(e) => updateWaypoint(wp.id, 'eta', e.target.value)}
-                      />
-                    </td>
-                    <td className="fv-route__center">
-                      <label className="fv-route__drift-toggle" title="Drift / Sail">
-                        <input
-                          type="checkbox"
-                          checked={wp.drift}
-                          onChange={(e) =>
-                            updateWaypoint(wp.id, 'drift', e.target.checked)
-                          }
-                        />
-                        <span>{wp.drift ? 'Drift' : 'Sail'}</span>
-                      </label>
-                    </td>
-                    <td className="fv-route__center">
-                      <button
-                        type="button"
-                        className="fv-route__icon-btn"
-                        title={
-                          idx === waypoints.length - 1
-                            ? t('cantInsertAfterArrival', 'Cannot add a waypoint after arrival')
-                            : t('insertAfter', 'Insert waypoint after')
-                        }
-                        onClick={() => insertWaypointAfter(idx)}
-                        disabled={idx === waypoints.length - 1}
-                      >
-                        <i className="fas fa-plus" aria-hidden="true" />
-                      </button>
-                      <button
-                        type="button"
-                        className="fv-route__icon-btn"
-                        title={
-                          wp.isPort
-                            ? t('cantRemovePort', 'Departure / arrival cannot be removed')
-                            : t('removeWp', 'Remove waypoint')
-                        }
-                        onClick={() => deletePoint(wp.id)}
-                        disabled={wp.isPort}
-                      >
-                        <i className="fas fa-times" aria-hidden="true" />
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
       </section>
     </div>
   );
